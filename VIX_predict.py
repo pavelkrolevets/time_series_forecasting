@@ -15,54 +15,26 @@ mpl.rcParams['axes.grid'] = False
 #     fname='jena_climate_2009_2016.csv.zip',
 #     extract=True)
 # csv_path, _ = os.path.splitext(zip_path)
-df = pd.read_csv('./data/monthly-sunspots.csv')
+df_1 = pd.read_csv('./data/^SP500TR.csv')
+df_2 = pd.read_csv('./data/^VIX.csv')
+df_2.rename({'Adj Close': 'VIX'}, axis=1, inplace=True)
+df_1.rename({'Adj Close': 'SPX'}, axis=1, inplace=True)
+print(df_1.head())
+print(df_2.head())
+
+df = pd.concat([df_1["Date"],df_1["SPX"], df_2["VIX"]], axis=1)
 print(df.head())
+
 
 def create_time_steps(length):
     return list(range(-length, 0))
 
-def show_plot(plot_data, delta, title):
-    labels = ['History', 'True Future', 'Model Prediction']
-    marker = ['.-', 'rx', 'go']
-    time_steps = create_time_steps(plot_data[0].shape[0])
-    if delta:
-        future = delta
-    else:
-        future = 0
-
-    plt.title(title)
-    for i, x in enumerate(plot_data):
-        if i:
-            plt.plot(future, plot_data[i], marker[i], markersize=10,
-                     label=labels[i])
-        else:
-            plt.plot(time_steps, plot_data[i].flatten(), marker[i], label=labels[i])
-    plt.legend()
-    plt.xlim([time_steps[0], (future+5)*2])
-    plt.xlabel('Time-Step')
-    return plt
-
-def univariate_data(dataset, start_index, end_index, history_size, target_size):
-    data = []
-    labels = []
-
-    start_index = start_index + history_size
-    if end_index is None:
-        end_index = len(dataset) - target_size
-
-    for i in range(start_index, end_index):
-        indices = range(i-history_size, i)
-        # Reshape data from (history_size,) to (history_size, 1)
-        data.append(np.reshape(dataset[indices], (history_size, 1)))
-        labels.append(dataset[i+target_size])
-    return np.array(data), np.array(labels)
-
-TRAIN_SPLIT = 2000
+TRAIN_SPLIT = 6000
 tf.random.set_seed(13)
 
-features_considered = ['Sunspots']
+features_considered = ['SPX', 'VIX']
 features = df[features_considered]
-features.index = df['Month']
+features.index = df['Date']
 features.head()
 features.plot(subplots=True)
 plt.show()
@@ -94,15 +66,15 @@ def multivariate_data(dataset, target, start_index, end_index, history_size,
     return np.array(data), np.array(labels)
 
 past_history = 120
-future_target = 21
+future_target = 10
 STEP = 1
 
-x_train_multi, y_train_multi = multivariate_data(dataset, dataset, 0,
+x_train_multi, y_train_multi = multivariate_data(dataset, dataset[:, 1], 0,
                                                  TRAIN_SPLIT, past_history,
-                                                 future_target, STEP, True)
-x_val_multi, y_val_multi = multivariate_data(dataset, dataset,
+                                                 future_target, STEP)
+x_val_multi, y_val_multi = multivariate_data(dataset, dataset[:, 1],
                                              TRAIN_SPLIT, None, past_history,
-                                             future_target, STEP, True)
+                                             future_target, STEP)
 
 
 print ('Single window of past history : {}'.format(x_train_multi[0].shape))
@@ -141,7 +113,7 @@ multi_step_model.add(tf.keras.layers.LSTM(32,
                                           return_sequences=True,
                                           input_shape=x_train_multi.shape[-2:]))
 multi_step_model.add(tf.keras.layers.LSTM(16, activation='relu'))
-multi_step_model.add(tf.keras.layers.Dense(21))
+multi_step_model.add(tf.keras.layers.Dense(10))
 
 multi_step_model.compile(optimizer=tf.keras.optimizers.RMSprop(clipvalue=1.0), loss='mae')
 
